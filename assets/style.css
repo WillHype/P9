@@ -378,4 +378,12 @@ footer ul{
 	list-style-type: none;
 }
 
+footer a{
+	text-decoration:none;
+	opacity:0.6;
+}
+footer a:hover{
+	text-decoration:none;
+	opacity:0.8;
+}
 
