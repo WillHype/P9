@@ -148,6 +148,8 @@ body {
 	font-family: Spectral;
 	font-style: italic;
 	font-weight: 300;
+	background-color: #EEE;
+	font-size: 20px;
 
 }
 .quote__author {
