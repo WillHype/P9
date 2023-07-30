@@ -40,6 +40,7 @@ body {
 
 .social-link img {
 	width: 20px;
+	height: 20px;
 }
 
 #about {
@@ -147,6 +148,8 @@ body {
 	font-family: Spectral;
 	font-style: italic;
 	font-weight: 300;
+	background-color: #EEE;
+	font-size: 20px;
 
 }
 .quote__author {
@@ -352,5 +355,15 @@ input[type="submit"] {
 	.picture {
 		width: 80%;
 	}
+}
+footer{
+	background-color: black;
+	color: white;
+	padding: 1em 0;
+	text-align: center;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	justify-content: space-evenly;
 }
 
