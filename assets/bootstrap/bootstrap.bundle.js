@@ -33,38 +33,6 @@
    */
 
 
-  const getUID = prefix => {
-    do {
-      prefix += Math.floor(Math.random() * MAX_UID);
-    } while (document.getElementById(prefix));
-
-    return prefix;
-  };
-
-  const getSelector = element => {
-    let selector = element.getAttribute('data-bs-target');
-
-    if (!selector || selector === '#') {
-      let hrefAttr = element.getAttribute('href'); // The only valid content that could double as a selector are IDs or classes,
-      // so everything starting with `#` or `.`. If a "real" URL is used as the selector,
-      // `document.querySelector` will rightfully complain it is invalid.
-      // See https://github.com/twbs/bootstrap/issues/32273
-
-      if (!hrefAttr || !hrefAttr.includes('#') && !hrefAttr.startsWith('.')) {
-        return null;
-      } // Just in case some CMS puts out a full URL with the anchor appended
-
-
-      if (hrefAttr.includes('#') && !hrefAttr.startsWith('#')) {
-        hrefAttr = `#${hrefAttr.split('#')[1]}`;
-      }
-
-      selector = hrefAttr && hrefAttr !== '#' ? hrefAttr.trim() : null;
-    }
-
-    return selector;
-  };
-
   const getSelectorFromElement = element => {
     const selector = getSelector(element);
 
@@ -73,11 +41,6 @@
     }
 
     return null;
-  };
-
-  const getElementFromSelector = element => {
-    const selector = getSelector(element);
-    return selector ? document.querySelector(selector) : null;
   };
 
   const getTransitionDurationFromElement = element => {
@@ -152,45 +115,7 @@
     return getComputedStyle(element).getPropertyValue('visibility') === 'visible';
   };
 
-  const isDisabled = element => {
-    if (!element || element.nodeType !== Node.ELEMENT_NODE) {
-      return true;
-    }
-
-    if (element.classList.contains('disabled')) {
-      return true;
-    }
-
-    if (typeof element.disabled !== 'undefined') {
-      return element.disabled;
-    }
-
-    return element.hasAttribute('disabled') && element.getAttribute('disabled') !== 'false';
-  };
-
-  const findShadowRoot = element => {
-    if (!document.documentElement.attachShadow) {
-      return null;
-    } // Can find the shadow root otherwise it'll return the document
-
-
-    if (typeof element.getRootNode === 'function') {
-      const root = element.getRootNode();
-      return root instanceof ShadowRoot ? root : null;
-    }
-
-    if (element instanceof ShadowRoot) {
-      return element;
-    } // when we don't find a shadow root
-
-
-    if (!element.parentNode) {
-      return null;
-    }
-
-    return findShadowRoot(element.parentNode);
-  };
-
+  
   const noop = () => {};
   /**
    * Trick to restart an element's animation
@@ -248,11 +173,6 @@
         const JQUERY_NO_CONFLICT = $.fn[name];
         $.fn[name] = plugin.jQueryInterface;
         $.fn[name].Constructor = plugin;
-
-        $.fn[name].noConflict = () => {
-          $.fn[name] = JQUERY_NO_CONFLICT;
-          return plugin.jQueryInterface;
-        };
       }
     });
   };
@@ -373,31 +293,6 @@
     };
   }
 
-  function bootstrapDelegationHandler(element, selector, fn) {
-    return function handler(event) {
-      const domElements = element.querySelectorAll(selector);
-
-      for (let {
-        target
-      } = event; target && target !== this; target = target.parentNode) {
-        for (let i = domElements.length; i--;) {
-          if (domElements[i] === target) {
-            event.delegateTarget = target;
-
-            if (handler.oneOff) {
-              EventHandler.off(element, event.type, selector, fn);
-            }
-
-            return fn.apply(target, [event]);
-          }
-        }
-      } // To please ESLint
-
-
-      return null;
-    };
-  }
-
   function findHandler(events, handler, delegationSelector = null) {
     const uidEventList = Object.keys(events);
 
@@ -439,11 +334,7 @@
 
     if (customEventsRegex.test(originalTypeEvent)) {
       const wrapFn = fn => {
-        return function (event) {
-          if (!event.relatedTarget || event.relatedTarget !== event.delegateTarget && !event.delegateTarget.contains(event.relatedTarget)) {
-            return fn.call(this, event);
-          }
-        };
+
       };
 
       if (delegationFn) {
@@ -473,26 +364,6 @@
     element.addEventListener(typeEvent, fn, delegation);
   }
 
-  function removeHandler(element, events, typeEvent, handler, delegationSelector) {
-    const fn = findHandler(events[typeEvent], handler, delegationSelector);
-
-    if (!fn) {
-      return;
-    }
-
-    element.removeEventListener(typeEvent, fn, Boolean(delegationSelector));
-    delete events[typeEvent][fn.uidEvent];
-  }
-
-  function removeNamespacedHandlers(element, events, typeEvent, namespace) {
-    const storeElementEvent = events[typeEvent] || {};
-    Object.keys(storeElementEvent).forEach(handlerKey => {
-      if (handlerKey.includes(namespace)) {
-        const event = storeElementEvent[handlerKey];
-        removeHandler(element, events, typeEvent, event.originalHandler, event.delegationSelector);
-      }
-    });
-  }
 
   function getTypeEvent(event) {
     // allow to get the native events from namespaced events ('click.bs.button' --> 'click')
@@ -503,47 +374,6 @@
   const EventHandler = {
     on(element, event, handler, delegationFn) {
       addHandler(element, event, handler, delegationFn, false);
-    },
-
-    one(element, event, handler, delegationFn) {
-      addHandler(element, event, handler, delegationFn, true);
-    },
-
-    off(element, originalTypeEvent, handler, delegationFn) {
-      if (typeof originalTypeEvent !== 'string' || !element) {
-        return;
-      }
-
-      const [delegation, originalHandler, typeEvent] = normalizeParams(originalTypeEvent, handler, delegationFn);
-      const inNamespace = typeEvent !== originalTypeEvent;
-      const events = getEvent(element);
-      const isNamespace = originalTypeEvent.startsWith('.');
-
-      if (typeof originalHandler !== 'undefined') {
-        // Simplest case: handler is passed, remove that listener ONLY.
-        if (!events || !events[typeEvent]) {
-          return;
-        }
-
-        removeHandler(element, events, typeEvent, originalHandler, delegation ? handler : null);
-        return;
-      }
-
-      if (isNamespace) {
-        Object.keys(events).forEach(elementEvent => {
-          removeNamespacedHandlers(element, events, elementEvent, originalTypeEvent.slice(1));
-        });
-      }
-
-      const storeElementEvent = events[typeEvent] || {};
-      Object.keys(storeElementEvent).forEach(keyHandlers => {
-        const handlerKey = keyHandlers.replace(stripUidRegex, '');
-
-        if (!inNamespace || originalTypeEvent.includes(handlerKey)) {
-          const event = storeElementEvent[keyHandlers];
-          removeHandler(element, events, typeEvent, event.originalHandler, event.delegationSelector);
-        }
-      });
     },
 
     trigger(element, event, args) {
@@ -583,10 +413,6 @@
       if (typeof args !== 'undefined') {
         Object.keys(args).forEach(key => {
           Object.defineProperty(evt, key, {
-            get() {
-              return args[key];
-            }
-
           });
         });
       }
@@ -647,19 +473,6 @@
       return null;
     },
 
-    remove(element, key) {
-      if (!elementMap.has(element)) {
-        return;
-      }
-
-      const instanceMap = elementMap.get(element);
-      instanceMap.delete(key); // free up element references if there are no instances left for an element
-
-      if (instanceMap.size === 0) {
-        elementMap.delete(element);
-      }
-    }
-
   };
 
   /**
@@ -688,13 +501,6 @@
       Data.set(this._element, this.constructor.DATA_KEY, this);
     }
 
-    dispose() {
-      Data.remove(this._element, this.constructor.DATA_KEY);
-      EventHandler.off(this._element, this.constructor.EVENT_KEY);
-      Object.getOwnPropertyNames(this).forEach(propertyName => {
-        this[propertyName] = null;
-      });
-    }
 
     _queueCallback(callback, element, isAnimated = true) {
       executeAfterTransition(callback, element, isAnimated);
@@ -708,14 +514,6 @@
 
     static getOrCreateInstance(element, config = {}) {
       return this.getInstance(element) || new this(element, typeof config === 'object' ? config : null);
-    }
-
-    static get VERSION() {
-      return VERSION;
-    }
-
-    static get NAME() {
-      throw new Error('You have to implement the static method "NAME", for each component!');
     }
 
     static get DATA_KEY() {
@@ -738,20 +536,6 @@
   const enableDismissTrigger = (component, method = 'hide') => {
     const clickEvent = `click.dismiss${component.EVENT_KEY}`;
     const name = component.NAME;
-    EventHandler.on(document, clickEvent, `[data-bs-dismiss="${name}"]`, function (event) {
-      if (['A', 'AREA'].includes(this.tagName)) {
-        event.preventDefault();
-      }
-
-      if (isDisabled(this)) {
-        return;
-      }
-
-      const target = getElementFromSelector(this) || this.closest(`.${name}`);
-      const instance = component.getOrCreateInstance(target); // Method argument is left, for Alert and only, as it doesn't implement the 'hide' method
-
-      instance[method]();
-    });
   };
 
   /**
@@ -784,46 +568,6 @@
     static get NAME() {
       return NAME$d;
     } // Public
-
-
-    close() {
-      const closeEvent = EventHandler.trigger(this._element, EVENT_CLOSE);
-
-      if (closeEvent.defaultPrevented) {
-        return;
-      }
-
-      this._element.classList.remove(CLASS_NAME_SHOW$8);
-
-      const isAnimated = this._element.classList.contains(CLASS_NAME_FADE$5);
-
-      this._queueCallback(() => this._destroyElement(), this._element, isAnimated);
-    } // Private
-
-
-    _destroyElement() {
-      this._element.remove();
-
-      EventHandler.trigger(this._element, EVENT_CLOSED);
-      this.dispose();
-    } // Static
-
-
-    static jQueryInterface(config) {
-      return this.each(function () {
-        const data = Alert.getOrCreateInstance(this);
-
-        if (typeof config !== 'string') {
-          return;
-        }
-
-        if (data[config] === undefined || config.startsWith('_') || config === 'constructor') {
-          throw new TypeError(`No method named "${config}"`);
-        }
-
-        data[config](this);
-      });
-    }
 
   }
   /**
@@ -873,23 +617,6 @@
     static get NAME() {
       return NAME$c;
     } // Public
-
-
-    toggle() {
-      // Toggle class and sync the `aria-pressed` attribute with the return value of the `.toggle()` method
-      this._element.setAttribute('aria-pressed', this._element.classList.toggle(CLASS_NAME_ACTIVE$3));
-    } // Static
-
-
-    static jQueryInterface(config) {
-      return this.each(function () {
-        const data = Button.getOrCreateInstance(this);
-
-        if (config === 'toggle') {
-          data[config]();
-        }
-      });
-    }
 
   }
   /**
@@ -1004,58 +731,6 @@
       return Element.prototype.querySelector.call(element, selector);
     },
 
-    children(element, selector) {
-      return [].concat(...element.children).filter(child => child.matches(selector));
-    },
-
-    parents(element, selector) {
-      const parents = [];
-      let ancestor = element.parentNode;
-
-      while (ancestor && ancestor.nodeType === Node.ELEMENT_NODE && ancestor.nodeType !== NODE_TEXT) {
-        if (ancestor.matches(selector)) {
-          parents.push(ancestor);
-        }
-
-        ancestor = ancestor.parentNode;
-      }
-
-      return parents;
-    },
-
-    prev(element, selector) {
-      let previous = element.previousElementSibling;
-
-      while (previous) {
-        if (previous.matches(selector)) {
-          return [previous];
-        }
-
-        previous = previous.previousElementSibling;
-      }
-
-      return [];
-    },
-
-    next(element, selector) {
-      let next = element.nextElementSibling;
-
-      while (next) {
-        if (next.matches(selector)) {
-          return [next];
-        }
-
-        next = next.nextElementSibling;
-      }
-
-      return [];
-    },
-
-    focusableChildren(element) {
-      const focusables = ['a', 'button', 'input', 'textarea', 'select', 'details', '[tabindex]', '[contenteditable="true"]'].map(selector => `${selector}:not([tabindex^="-"])`).join(', ');
-      return this.find(focusables, element).filter(el => !isDisabled(el) && isVisible(el));
-    }
-
   };
 
   /**
@@ -1161,10 +836,6 @@
     } // Getters
 
 
-    static get Default() {
-      return Default$a;
-    }
-
     static get NAME() {
       return NAME$b;
     } // Public
@@ -1180,10 +851,6 @@
       if (!document.hidden && isVisible(this._element)) {
         this.next();
       }
-    }
-
-    prev() {
-      this._slide(ORDER_PREV);
     }
 
     pause(event) {
@@ -1217,32 +884,6 @@
       }
     }
 
-    to(index) {
-      this._activeElement = SelectorEngine.findOne(SELECTOR_ACTIVE_ITEM, this._element);
-
-      const activeIndex = this._getItemIndex(this._activeElement);
-
-      if (index > this._items.length - 1 || index < 0) {
-        return;
-      }
-
-      if (this._isSliding) {
-        EventHandler.one(this._element, EVENT_SLID, () => this.to(index));
-        return;
-      }
-
-      if (activeIndex === index) {
-        this.pause();
-        this.cycle();
-        return;
-      }
-
-      const order = index > activeIndex ? ORDER_NEXT : ORDER_PREV;
-
-      this._slide(order, this._items[index]);
-    } // Private
-
-
     _getConfig(config) {
       config = { ...Default$a,
         ...Manipulator.getDataAttributes(this._element),
@@ -1250,23 +891,6 @@
       };
       typeCheckConfig(NAME$b, config, DefaultType$a);
       return config;
-    }
-
-    _handleSwipe() {
-      const absDeltax = Math.abs(this.touchDeltaX);
-
-      if (absDeltax <= SWIPE_THRESHOLD) {
-        return;
-      }
-
-      const direction = absDeltax / this.touchDeltaX;
-      this.touchDeltaX = 0;
-
-      if (!direction) {
-        return;
-      }
-
-      this._slide(direction > 0 ? DIRECTION_RIGHT : DIRECTION_LEFT);
     }
 
     _addEventListeners() {
@@ -1289,14 +913,6 @@
         return this._pointerEvent && (event.pointerType === POINTER_TYPE_PEN || event.pointerType === POINTER_TYPE_TOUCH);
       };
 
-      const start = event => {
-        if (hasPointerPenTouch(event)) {
-          this.touchStartX = event.clientX;
-        } else if (!this._pointerEvent) {
-          this.touchStartX = event.touches[0].clientX;
-        }
-      };
-
       const move = event => {
         // ensure swiping with one touch and not pinching
         this.touchDeltaX = event.touches && event.touches.length > 1 ? 0 : event.touches[0].clientX - this.touchStartX;
@@ -1307,24 +923,6 @@
           this.touchDeltaX = event.clientX - this.touchStartX;
         }
 
-        this._handleSwipe();
-
-        if (this._config.pause === 'hover') {
-          // If it's a touch-enabled device, mouseenter/leave are fired as
-          // part of the mouse compatibility events on first tap - the carousel
-          // would stop cycling until user tapped out of it;
-          // here, we listen for touchend, explicitly pause the carousel
-          // (as if it's the second time we tap on it, mouseenter compat event
-          // is NOT fired) and after a timeout (to allow for mouse compatibility
-          // events to fire) we explicitly restart cycling
-          this.pause();
-
-          if (this.touchTimeout) {
-            clearTimeout(this.touchTimeout);
-          }
-
-          this.touchTimeout = setTimeout(event => this.cycle(event), TOUCHEVENT_COMPAT_WAIT + this._config.interval);
-        }
       };
 
       SelectorEngine.find(SELECTOR_ITEM_IMG, this._element).forEach(itemImg => {
@@ -1340,20 +938,6 @@
         EventHandler.on(this._element, EVENT_TOUCHSTART, event => start(event));
         EventHandler.on(this._element, EVENT_TOUCHMOVE, event => move(event));
         EventHandler.on(this._element, EVENT_TOUCHEND, event => end(event));
-      }
-    }
-
-    _keydown(event) {
-      if (/input|textarea/i.test(event.target.tagName)) {
-        return;
-      }
-
-      const direction = KEY_TO_DIRECTION[event.key];
-
-      if (direction) {
-        event.preventDefault();
-
-        this._slide(direction);
       }
     }
 
@@ -1550,39 +1134,7 @@
         data.cycle();
       }
     }
-
-    static jQueryInterface(config) {
-      return this.each(function () {
-        Carousel.carouselInterface(this, config);
-      });
-    }
-
-    static dataApiClickHandler(event) {
-      const target = getElementFromSelector(this);
-
-      if (!target || !target.classList.contains(CLASS_NAME_CAROUSEL)) {
-        return;
-      }
-
-      const config = { ...Manipulator.getDataAttributes(target),
-        ...Manipulator.getDataAttributes(this)
-      };
-      const slideIndex = this.getAttribute('data-bs-slide-to');
-
-      if (slideIndex) {
-        config.interval = false;
-      }
-
-      Carousel.carouselInterface(target, config);
-
-      if (slideIndex) {
-        Carousel.getInstance(target).to(slideIndex);
-      }
-
-      event.preventDefault();
-    }
-
-  }
+}
   /**
    * ------------------------------------------------------------------------
    * Data Api implementation
@@ -1654,44 +1206,7 @@
 
   class Collapse extends BaseComponent {
     constructor(element, config) {
-      super(element);
-      this._isTransitioning = false;
-      this._config = this._getConfig(config);
-      this._triggerArray = [];
-      const toggleList = SelectorEngine.find(SELECTOR_DATA_TOGGLE$4);
-
-      for (let i = 0, len = toggleList.length; i < len; i++) {
-        const elem = toggleList[i];
-        const selector = getSelectorFromElement(elem);
-        const filterElement = SelectorEngine.find(selector).filter(foundElem => foundElem === this._element);
-
-        if (selector !== null && filterElement.length) {
-          this._selector = selector;
-
-          this._triggerArray.push(elem);
-        }
-      }
-
-      this._initializeChildren();
-
-      if (!this._config.parent) {
-        this._addAriaAndCollapsedClass(this._triggerArray, this._isShown());
-      }
-
-      if (this._config.toggle) {
-        this.toggle();
-      }
     } // Getters
-
-
-    static get Default() {
-      return Default$9;
-    }
-
-    static get NAME() {
-      return NAME$a;
-    } // Public
-
 
     toggle() {
       if (this._isShown()) {
@@ -1706,194 +1221,7 @@
         return;
       }
 
-      let actives = [];
-      let activesData;
-
-      if (this._config.parent) {
-        const children = SelectorEngine.find(CLASS_NAME_DEEPER_CHILDREN, this._config.parent);
-        actives = SelectorEngine.find(SELECTOR_ACTIVES, this._config.parent).filter(elem => !children.includes(elem)); // remove children if greater depth
-      }
-
-      const container = SelectorEngine.findOne(this._selector);
-
-      if (actives.length) {
-        const tempActiveData = actives.find(elem => container !== elem);
-        activesData = tempActiveData ? Collapse.getInstance(tempActiveData) : null;
-
-        if (activesData && activesData._isTransitioning) {
-          return;
-        }
-      }
-
-      const startEvent = EventHandler.trigger(this._element, EVENT_SHOW$5);
-
-      if (startEvent.defaultPrevented) {
-        return;
-      }
-
-      actives.forEach(elemActive => {
-        if (container !== elemActive) {
-          Collapse.getOrCreateInstance(elemActive, {
-            toggle: false
-          }).hide();
-        }
-
-        if (!activesData) {
-          Data.set(elemActive, DATA_KEY$9, null);
-        }
-      });
-
-      const dimension = this._getDimension();
-
-      this._element.classList.remove(CLASS_NAME_COLLAPSE);
-
-      this._element.classList.add(CLASS_NAME_COLLAPSING);
-
-      this._element.style[dimension] = 0;
-
-      this._addAriaAndCollapsedClass(this._triggerArray, true);
-
-      this._isTransitioning = true;
-
-      const complete = () => {
-        this._isTransitioning = false;
-
-        this._element.classList.remove(CLASS_NAME_COLLAPSING);
-
-        this._element.classList.add(CLASS_NAME_COLLAPSE, CLASS_NAME_SHOW$7);
-
-        this._element.style[dimension] = '';
-        EventHandler.trigger(this._element, EVENT_SHOWN$5);
-      };
-
-      const capitalizedDimension = dimension[0].toUpperCase() + dimension.slice(1);
-      const scrollSize = `scroll${capitalizedDimension}`;
-
-      this._queueCallback(complete, this._element, true);
-
-      this._element.style[dimension] = `${this._element[scrollSize]}px`;
-    }
-
-    hide() {
-      if (this._isTransitioning || !this._isShown()) {
-        return;
-      }
-
-      const startEvent = EventHandler.trigger(this._element, EVENT_HIDE$5);
-
-      if (startEvent.defaultPrevented) {
-        return;
-      }
-
-      const dimension = this._getDimension();
-
-      this._element.style[dimension] = `${this._element.getBoundingClientRect()[dimension]}px`;
-      reflow(this._element);
-
-      this._element.classList.add(CLASS_NAME_COLLAPSING);
-
-      this._element.classList.remove(CLASS_NAME_COLLAPSE, CLASS_NAME_SHOW$7);
-
-      const triggerArrayLength = this._triggerArray.length;
-
-      for (let i = 0; i < triggerArrayLength; i++) {
-        const trigger = this._triggerArray[i];
-        const elem = getElementFromSelector(trigger);
-
-        if (elem && !this._isShown(elem)) {
-          this._addAriaAndCollapsedClass([trigger], false);
-        }
-      }
-
-      this._isTransitioning = true;
-
-      const complete = () => {
-        this._isTransitioning = false;
-
-        this._element.classList.remove(CLASS_NAME_COLLAPSING);
-
-        this._element.classList.add(CLASS_NAME_COLLAPSE);
-
-        EventHandler.trigger(this._element, EVENT_HIDDEN$5);
-      };
-
-      this._element.style[dimension] = '';
-
-      this._queueCallback(complete, this._element, true);
-    }
-
-    _isShown(element = this._element) {
-      return element.classList.contains(CLASS_NAME_SHOW$7);
     } // Private
-
-
-    _getConfig(config) {
-      config = { ...Default$9,
-        ...Manipulator.getDataAttributes(this._element),
-        ...config
-      };
-      config.toggle = Boolean(config.toggle); // Coerce string values
-
-      config.parent = getElement(config.parent);
-      typeCheckConfig(NAME$a, config, DefaultType$9);
-      return config;
-    }
-
-    _getDimension() {
-      return this._element.classList.contains(CLASS_NAME_HORIZONTAL) ? WIDTH : HEIGHT;
-    }
-
-    _initializeChildren() {
-      if (!this._config.parent) {
-        return;
-      }
-
-      const children = SelectorEngine.find(CLASS_NAME_DEEPER_CHILDREN, this._config.parent);
-      SelectorEngine.find(SELECTOR_DATA_TOGGLE$4, this._config.parent).filter(elem => !children.includes(elem)).forEach(element => {
-        const selected = getElementFromSelector(element);
-
-        if (selected) {
-          this._addAriaAndCollapsedClass([element], this._isShown(selected));
-        }
-      });
-    }
-
-    _addAriaAndCollapsedClass(triggerArray, isOpen) {
-      if (!triggerArray.length) {
-        return;
-      }
-
-      triggerArray.forEach(elem => {
-        if (isOpen) {
-          elem.classList.remove(CLASS_NAME_COLLAPSED);
-        } else {
-          elem.classList.add(CLASS_NAME_COLLAPSED);
-        }
-
-        elem.setAttribute('aria-expanded', isOpen);
-      });
-    } // Static
-
-
-    static jQueryInterface(config) {
-      return this.each(function () {
-        const _config = {};
-
-        if (typeof config === 'string' && /show|hide/.test(config)) {
-          _config.toggle = false;
-        }
-
-        const data = Collapse.getOrCreateInstance(this, _config);
-
-        if (typeof config === 'string') {
-          if (typeof data[config] === 'undefined') {
-            throw new TypeError(`No method named "${config}"`);
-          }
-
-          data[config]();
-        }
-      });
-    }
 
   }
   /**
@@ -1902,21 +1230,6 @@
    * ------------------------------------------------------------------------
    */
 
-
-  EventHandler.on(document, EVENT_CLICK_DATA_API$4, SELECTOR_DATA_TOGGLE$4, function (event) {
-    // preventDefault only for <a> elements (which change the URL) not inside the collapsible element
-    if (event.target.tagName === 'A' || event.delegateTarget && event.delegateTarget.tagName === 'A') {
-      event.preventDefault();
-    }
-
-    const selector = getSelectorFromElement(this);
-    const selectorElements = SelectorEngine.find(selector);
-    selectorElements.forEach(element => {
-      Collapse.getOrCreateInstance(element, {
-        toggle: false
-      }).toggle();
-    });
-  });
   /**
    * ------------------------------------------------------------------------
    * jQuery
@@ -1958,115 +1271,7 @@
   var afterWrite = 'afterWrite';
   var modifierPhases = [beforeRead, read, afterRead, beforeMain, main, afterMain, beforeWrite, write, afterWrite];
 
-  function getNodeName(element) {
-    return element ? (element.nodeName || '').toLowerCase() : null;
-  }
-
-  function getWindow(node) {
-    if (node == null) {
-      return window;
-    }
-
-    if (node.toString() !== '[object Window]') {
-      var ownerDocument = node.ownerDocument;
-      return ownerDocument ? ownerDocument.defaultView || window : window;
-    }
-
-    return node;
-  }
-
-  function isElement(node) {
-    var OwnElement = getWindow(node).Element;
-    return node instanceof OwnElement || node instanceof Element;
-  }
-
-  function isHTMLElement(node) {
-    var OwnElement = getWindow(node).HTMLElement;
-    return node instanceof OwnElement || node instanceof HTMLElement;
-  }
-
-  function isShadowRoot(node) {
-    // IE 11 has no ShadowRoot
-    if (typeof ShadowRoot === 'undefined') {
-      return false;
-    }
-
-    var OwnElement = getWindow(node).ShadowRoot;
-    return node instanceof OwnElement || node instanceof ShadowRoot;
-  }
-
   // and applies them to the HTMLElements such as popper and arrow
-
-  function applyStyles(_ref) {
-    var state = _ref.state;
-    Object.keys(state.elements).forEach(function (name) {
-      var style = state.styles[name] || {};
-      var attributes = state.attributes[name] || {};
-      var element = state.elements[name]; // arrow is optional + virtual elements
-
-      if (!isHTMLElement(element) || !getNodeName(element)) {
-        return;
-      } // Flow doesn't support to extend this property, but it's the most
-      // effective way to apply styles to an HTMLElement
-      // $FlowFixMe[cannot-write]
-
-
-      Object.assign(element.style, style);
-      Object.keys(attributes).forEach(function (name) {
-        var value = attributes[name];
-
-        if (value === false) {
-          element.removeAttribute(name);
-        } else {
-          element.setAttribute(name, value === true ? '' : value);
-        }
-      });
-    });
-  }
-
-  function effect$2(_ref2) {
-    var state = _ref2.state;
-    var initialStyles = {
-      popper: {
-        position: state.options.strategy,
-        left: '0',
-        top: '0',
-        margin: '0'
-      },
-      arrow: {
-        position: 'absolute'
-      },
-      reference: {}
-    };
-    Object.assign(state.elements.popper.style, initialStyles.popper);
-    state.styles = initialStyles;
-
-    if (state.elements.arrow) {
-      Object.assign(state.elements.arrow.style, initialStyles.arrow);
-    }
-
-    return function () {
-      Object.keys(state.elements).forEach(function (name) {
-        var element = state.elements[name];
-        var attributes = state.attributes[name] || {};
-        var styleProperties = Object.keys(state.styles.hasOwnProperty(name) ? state.styles[name] : initialStyles[name]); // Set all values to an empty string to unset them
-
-        var style = styleProperties.reduce(function (style, property) {
-          style[property] = '';
-          return style;
-        }, {}); // arrow is optional + virtual elements
-
-        if (!isHTMLElement(element) || !getNodeName(element)) {
-          return;
-        }
-
-        Object.assign(element.style, style);
-        Object.keys(attributes).forEach(function (attribute) {
-          element.removeAttribute(attribute);
-        });
-      });
-    };
-  } // eslint-disable-next-line import/no-unused-modules
 
 
   const applyStyles$1 = {
@@ -2077,10 +1282,6 @@
     effect: effect$2,
     requires: ['computeStyles']
   };
-
-  function getBasePlacement(placement) {
-    return placement.split('-')[0];
-  }
 
   // import { isHTMLElement } from './instanceOf';
   function getBoundingClientRect(element, // eslint-disable-next-line unused-imports/no-unused-vars
